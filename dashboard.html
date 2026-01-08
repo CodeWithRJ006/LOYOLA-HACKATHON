@@ -3,178 +3,278 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Attendrix - Smart Attendance</title>
+    <title>Attendrix | Smart AI Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,500;1,700&family=Inter:wght@100..900&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.5.7/dist/face-api.js"></script>
+    
     <style>
+        :root {
+            --bg-deep: #030305;
+            --accent-indigo: #6366f1;
+            --card-glass: rgba(255, 255, 255, 0.02);
+            --border-glass: rgba(255, 255, 255, 0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
+            background-color: var(--bg-deep);
+            color: #f8fafc;
             font-family: 'Inter', sans-serif;
-            overflow-y: auto; 
+            overflow: hidden;
+            cursor: none;
         }
-        .loading-spinner {
-            border: 4px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top: 4px solid #fff;
-            width: 30px;
-            height: 30px;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        .image-container {
-            position: relative;
-            display: inline-block;
-            margin-top: 1rem;
-            max-width: 100%;
-        }
-        #outputCanvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            max-width: 100%;
-            height: auto;
-        }
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-        ::-webkit-scrollbar-thumb {
-            background-color: #a0aec0;
-            border-radius: 4px;
-        }
-        .dark-mode {
-            background-color: #1a202c;
-            color: #e2e8f0;
-        }
+
+        #cursor-dot { width: 6px; height: 6px; background: #fff; position: fixed; border-radius: 50%; pointer-events: none; z-index: 10000; opacity: 0; }
+        #cursor-outline { width: 45px; height: 45px; border: 1.5px solid rgba(255, 255, 255, 0.3); position: fixed; border-radius: 50%; pointer-events: none; z-index: 9999; transition: transform 0.25s cubic-bezier(0.23, 1, 0.32, 1); opacity: 0; }
+        #snow-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; opacity: 0.3; }
+
+        .glass-sidebar { background: rgba(3, 3, 5, 0.6); backdrop-filter: blur(20px); border-right: 1px solid var(--border-glass); }
+        .glass-card { background: var(--card-glass); border: 1px solid var(--border-glass); backdrop-filter: blur(10px); transition: all 0.4s ease; }
+        .glass-card:hover { border-color: var(--accent-indigo); background: rgba(99, 102, 241, 0.05); }
+        .glass-nav { background: rgba(3, 3, 5, 0.4); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border-glass); }
+
+        .cinematic-text { background: linear-gradient(180deg, #ffffff 0%, #a5b4fc 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+        .image-container { position: relative; display: inline-block; margin-top: 1rem; max-width: 100%; }
+        #outputCanvas { position: absolute; top: 0; left: 0; max-width: 100%; height: auto; pointer-events: none; }
+        
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+
+        .active-tab { color: #6366f1 !important; background: rgba(99, 102, 241, 0.1); border-radius: 12px; }
     </style>
 </head>
-<body class="bg-gray-100 flex h-screen">
+<body class="flex h-screen overflow-hidden">
 
-    <aside class="w-64 bg-gray-900 text-gray-400 p-6 flex flex-col shadow-lg">
-        <div class="mb-8">
-            <h1 class="text-2xl font-bold text-white">Attendrix AI</h1>
+    <div id="cursor-dot"></div>
+    <div id="cursor-outline"></div>
+    <canvas id="snow-canvas"></canvas>
+
+    <aside class="w-72 glass-sidebar p-8 flex flex-col z-50">
+        <div class="mb-12 flex items-center gap-3">
+            <div class="bg-indigo-600 p-2 rounded-xl shadow-lg shadow-indigo-600/40">
+                <i data-lucide="scan-face" class="w-6 h-6 text-white"></i>
+            </div>
+            <h1 class="text-xl font-black tracking-tighter text-white">Attendrix AI</h1>
         </div>
-        <nav class="flex-1">
-            <ul>
-                <li class="mb-4">
-                    <div class="text-xs uppercase font-semibold text-gray-500 tracking-wider">Menu</div>
-                </li>
-                <li class="mb-2">
-                    <a href="#" class="flex justify-between items-center py-2 px-4 rounded-md hover:bg-gray-700 transition duration-300" onclick="toggleDropdown(event)">
-                        <span>Class</span>
-                        <i class="fas fa-caret-down text-sm"></i>
-                    </a>
-                    <ul class="ml-4 mt-2 space-y-2 hidden">
-                        <li><a href="#" class="block py-2 px-4 rounded-md text-sm hover:bg-gray-700 transition duration-300" onclick="showAttendanceContent('classA')">Class A</a></li>
-                        <li><a href="#" class="block py-2 px-4 rounded-md text-sm hover:bg-gray-700 transition duration-300" onclick="showAttendanceContent('classB')">Class B</a></li>
-                        <li><a href="#" class="block py-2 px-4 rounded-md text-sm hover:bg-gray-700 transition duration-300" onclick="showAttendanceContent('classC')">Class C</a></li>
-                        <li><a href="#" class="block py-2 px-4 rounded-md text-sm hover:bg-gray-700 transition duration-300" onclick="showAttendanceContent('classD')">Class D</a></li>
-                    </ul>
-                </li>
-                <li class="mb-2">
-                    <a href="#" class="block py-2 px-4 rounded-md hover:bg-gray-700 transition duration-300" onclick="showContent('attendanceReport')">Report</a>
-                </li>
-                <li class="mb-2">
-                    <a href="#" class="block py-2 px-4 rounded-md hover:bg-gray-700 transition duration-300" onclick="showContent('settings')">Settings</a>
-                </li>
-            </ul>
+
+        <nav class="flex-1 space-y-8">
+            <div>
+                <div class="text-[9px] uppercase font-black text-gray-500 tracking-[0.3em] mb-4">Navigation</div>
+                <ul class="space-y-2">
+                    <li><button onclick="showContent('dashboard')" class="w-full flex items-center gap-3 py-3 px-4 transition text-xs font-bold text-gray-400 hover:text-white" id="btn-dashboard"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> Overview</button></li>
+                    <li>
+                        <button onclick="toggleDropdown(event)" class="w-full flex justify-between items-center py-3 px-4 transition text-xs font-bold text-gray-400 hover:text-white group">
+                            <span class="flex items-center gap-3"><i data-lucide="camera" class="w-4 h-4"></i> Recognize</span>
+                            <i data-lucide="chevron-down" class="w-3 h-3 transition-transform group-focus:rotate-180"></i>
+                        </button>
+                        <ul id="class-dropdown" class="ml-9 mt-2 space-y-1 hidden">
+                            <li><a href="#" onclick="showAttendanceContent('classA')" class="block py-2 text-[11px] text-gray-500 hover:text-indigo-400 transition">Class A</a></li>
+                            <li><a href="#" onclick="showAttendanceContent('classB')" class="block py-2 text-[11px] text-gray-500 hover:text-indigo-400 transition">Class B</a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+
+            <div>
+                <div class="text-[9px] uppercase font-black text-gray-500 tracking-[0.3em] mb-4">Personal</div>
+                <ul class="space-y-2">
+                    <li><button onclick="showContent('profile')" class="w-full flex items-center gap-3 py-3 px-4 transition text-xs font-bold text-gray-400 hover:text-white" id="btn-profile"><i data-lucide="user" class="w-4 h-4"></i> My Profile</button></li>
+                    <li><button onclick="showContent('system')" class="w-full flex items-center gap-3 py-3 px-4 transition text-xs font-bold text-gray-400 hover:text-white" id="btn-system"><i data-lucide="cpu" class="w-4 h-4"></i> System Health</button></li>
+                </ul>
+            </div>
         </nav>
+        
+        <div class="mt-auto pt-6 border-t border-white/5">
+            <a href="index.html" class="flex items-center gap-3 py-3 px-4 text-xs font-bold text-red-400/60 hover:text-red-400 transition">
+                <i data-lucide="log-out" class="w-4 h-4"></i> Sign Out
+            </a>
+        </div>
     </aside>
 
-    <div class="flex-1 p-8 overflow-y-auto">
-        <header class="bg-white rounded-lg shadow-md p-4 mb-8 flex justify-end items-center">
-            <nav>
-                <ul class="flex items-center space-x-6 text-gray-600 font-medium">
-                    <li><a href="#" class="hover:text-indigo-600 transition duration-300" onclick="showContent('dashboard')">Home</a></li>
-                </ul>
-            </nav>
+    <div class="flex-1 flex flex-col relative z-10 overflow-hidden">
+        
+        <header class="glass-nav h-20 px-10 flex items-center justify-between">
+            <div id="status-indicator" class="flex items-center gap-3">
+                <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                <span class="text-[10px] font-black uppercase tracking-widest text-indigo-400">AI Core: Online</span>
+            </div>
+            <div class="flex items-center gap-6">
+                <div class="text-right">
+                    <div class="text-[10px] font-black text-white">B. RAJESWARA RAO</div>
+                    <div class="text-[8px] font-bold text-gray-500 uppercase tracking-widest">Lead Architect</div>
+                </div>
+                <img src="RJ.jpeg" class="w-10 h-10 rounded-xl border border-white/10 object-cover" onerror="this.src='https://via.placeholder.com/40x40'">
+            </div>
         </header>
 
-        <div id="dashboardContent" class="content-section">
-            <div class="p-8 bg-white rounded-lg shadow-md h-full">
-                <h2 class="text-3xl font-bold mb-4 text-gray-800">Welcome to your Dashboard</h2>
-                <p class="text-gray-600">Please select a class from the menu to manage attendance.</p>
-            </div>
-        </div>
-
-        <div id="attendanceContent" class="content-section hidden p-8 bg-white rounded-lg shadow-md">
-            <h2 class="text-3xl font-bold mb-6 text-gray-800" id="attendanceTitle">Class Attendance</h2>
+        <main class="flex-1 overflow-y-auto p-10">
             
-            <div class="card mb-8">
-                <h3 class="text-2xl font-semibold mb-4 text-gray-700">1. Upload Known Faces (Student Dataset)</h3>
-                <p class="text-gray-500 mb-4">Select multiple individual images. **Filename must be the student's name (e.g., `sai ganesh.jpg`).**</p>
-                <input type="file" id="knownFacesInput" accept="image/*" multiple class="w-full text-gray-700 bg-gray-100 rounded-lg p-2 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer">
-                <div id="knownFacesContainer" class="mt-4 flex flex-wrap gap-4"></div>
-            </div>
-            
-            <div class="flex justify-center gap-4 mb-8">
-                <button id="recognizeButton" class="bg-indigo-600 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:bg-indigo-700 transition duration-300 ease-in-out disabled:opacity-50" disabled>
-                    Take Attendance
-                </button>
-            </div>
-
-            <div class="card mb-8">
-                <h3 class="text-2xl font-semibold mb-4 text-gray-700">2. Upload Group Photo</h3>
-                <p class="text-gray-500 mb-4">Select the group photo to scan and mark attendance.</p>
-                <input type="file" id="groupPhotoInput" accept="image/jpeg, image/png" class="w-full text-gray-700 bg-gray-100 rounded-lg p-2 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer">
-                <div class="image-container mx-auto" id="groupPhotoContainer">
-                    <img id="groupPhoto" class="max-w-full h-auto rounded-lg shadow-xl">
-                    <canvas id="outputCanvas"></canvas>
+            <div id="dashboardContent" class="content-section">
+                <h2 class="text-5xl font-black tracking-tighter mb-8 cinematic-text">System Overview</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+                    <div class="glass-card p-8 rounded-[32px]">
+                        <i data-lucide="bar-chart-3" class="w-6 h-6 text-indigo-500 mb-4"></i>
+                        <h4 class="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-2">Total Scans</h4>
+                        <div class="text-4xl font-black">1,284</div>
+                    </div>
+                    <div class="glass-card p-8 rounded-[32px]">
+                        <i data-lucide="shield-check" class="w-6 h-6 text-green-500 mb-4"></i>
+                        <h4 class="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-2">Accuracy Rate</h4>
+                        <div class="text-4xl font-black">99.1%</div>
+                    </div>
+                    <div class="glass-card p-8 rounded-[32px]">
+                        <i data-lucide="clock" class="w-6 h-6 text-blue-500 mb-4"></i>
+                        <h4 class="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-2">Uptime</h4>
+                        <div class="text-4xl font-black">100%</div>
+                    </div>
+                </div>
+                <div class="glass-card p-10 rounded-[40px]">
+                    <h3 class="text-xl font-bold mb-4">Recent Activity</h3>
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between p-4 bg-white/5 rounded-2xl">
+                            <span class="text-xs font-bold">Class A Attendance Completed</span>
+                            <span class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">2 hours ago</span>
+                        </div>
+                        <div class="flex items-center justify-between p-4 bg-white/5 rounded-2xl">
+                            <span class="text-xs font-bold">New Student Dataset Ingested</span>
+                            <span class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Yesterday</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div id="statusMessage" class="text-center text-blue-600 mb-4 font-semibold text-lg p-2 bg-blue-50 rounded">Loading AI models...</div>
-            <div id="attendanceResults" class="hidden mt-8"></div>
-        </div>
-        
-        <div id="attendanceReportContent" class="content-section hidden p-8 bg-white rounded-lg shadow-md">
-            <h2 class="text-3xl font-bold mb-6 text-gray-800">Attendance Report</h2>
-            <p class="text-gray-600 mb-6">Attendance records will appear here.</p>
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Class</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Present</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Absent</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
-                        <tr>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">2025-09-19</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Class A</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-green-600">28</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-red-600">2</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-indigo-600"><a href="#">View</a></td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div id="attendanceContent" class="content-section hidden">
+                <h2 id="attendanceTitle" class="text-4xl font-black tracking-tighter mb-8 cinematic-text">Class Management</h2>
+                
+                <div class="grid grid-cols-1 gap-8">
+                    <div class="glass-card p-10 rounded-[40px]">
+                        <h3 class="text-lg font-bold mb-6">1. Known Faces (Dataset)</h3>
+                        <input type="file" id="knownFacesInput" accept="image/*" multiple class="block w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-black file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer">
+                        <div id="knownFacesContainer" class="mt-8 flex flex-wrap gap-6"></div>
+                    </div>
+
+                    <div class="glass-card p-10 rounded-[40px]">
+                        <h3 class="text-lg font-bold mb-6">2. Group Scene Analysis</h3>
+                        <input type="file" id="groupPhotoInput" accept="image/*" class="block w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-black file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer">
+                        <div class="image-container mx-auto mt-8 border border-white/10 rounded-3xl overflow-hidden shadow-2xl" id="groupPhotoContainer">
+                            <img id="groupPhoto" class="max-w-full h-auto">
+                            <canvas id="outputCanvas"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-col items-center gap-6 my-12">
+                    <div id="statusMessage" class="px-6 py-3 rounded-full bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400">Select class to begin.</div>
+                    <button id="recognizeButton" disabled class="px-16 py-6 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-[0.3em] hover:bg-indigo-500 transition-all shadow-2xl shadow-indigo-600/30 disabled:opacity-20">Execute AI Recognition</button>
+                </div>
+
+                <div id="attendanceResults" class="hidden glass-card p-12 rounded-[40px] mb-20"></div>
             </div>
-        </div>
 
-        <div id="settingsContent" class="content-section hidden p-8 bg-white rounded-lg shadow-md">
-            <h2 class="text-3xl font-bold mb-6 text-gray-800">Settings</h2>
-            <p class="text-gray-600">Settings placeholder.</p>
-        </div>
+            <div id="profileContent" class="content-section hidden">
+                <h2 class="text-4xl font-black tracking-tighter mb-8 cinematic-text">Lead Architect Profile</h2>
+                <div class="glass-card p-12 rounded-[40px] flex flex-col md:flex-row gap-12 items-center">
+                    <img src="RJ.jpeg" class="w-48 h-48 rounded-[32px] border-2 border-indigo-600 shadow-2xl shadow-indigo-600/20 object-cover" onerror="this.src='https://via.placeholder.com/200x200'">
+                    <div class="flex-1">
+                        <h3 class="text-3xl font-black mb-2 uppercase tracking-tighter">B. Rajeswara Rao</h3>
+                        <p class="text-indigo-400 text-xs font-black uppercase tracking-[0.4em] mb-6">Lead Developer | SMEC CSE</p>
+                        <div class="grid grid-cols-2 gap-6">
+                            <div class="p-4 bg-white/5 rounded-2xl">
+                                <p class="text-[9px] font-black uppercase text-gray-500">Department</p>
+                                <p class="text-sm font-bold">Computer Science</p>
+                            </div>
+                            <div class="p-4 bg-white/5 rounded-2xl">
+                                <p class="text-[9px] font-black uppercase text-gray-500">Project Focus</p>
+                                <p class="text-sm font-bold">AI Computer Vision</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-        <div id="helpContent" class="content-section hidden p-8 bg-white rounded-lg shadow-md">
-            <h2 class="text-3xl font-bold mb-6 text-gray-800">Help & Support</h2>
-            <p class="text-gray-600">Contact support for assistance.</p>
-        </div>
+            <div id="systemContent" class="content-section hidden">
+                <h2 class="text-4xl font-black tracking-tighter mb-8 cinematic-text">System Working</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="glass-card p-8 rounded-[32px]">
+                        <h4 class="text-indigo-400 text-[10px] font-black mb-6 uppercase tracking-widest">Neural Engine</h4>
+                        <div class="flex items-center gap-4 mb-4">
+                            <div class="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                                <div class="h-full bg-indigo-600" style="width: 85%"></div>
+                            </div>
+                            <span class="text-xs font-bold">85% Usage</span>
+                        </div>
+                        <p class="text-gray-500 text-[10px] font-bold uppercase">Optimized via MobilenetV1</p>
+                    </div>
+                    <div class="glass-card p-8 rounded-[32px]">
+                        <h4 class="text-indigo-400 text-[10px] font-black mb-6 uppercase tracking-widest">Model Latency</h4>
+                        <div class="text-3xl font-bold tracking-tighter">142ms</div>
+                        <p class="text-gray-500 text-[10px] font-bold uppercase mt-2">Ultra-Fast Realtime Response</p>
+                    </div>
+                </div>
+            </div>
+
+        </main>
     </div>
 
     <script>
+        // --- INTERFACE LOGIC ---
+        lucide.createIcons();
+        const dot = document.getElementById('cursor-dot');
+        const outline = document.getElementById('cursor-outline');
+        window.addEventListener('mousemove', (e) => {
+            dot.style.opacity = outline.style.opacity = "1";
+            dot.style.transform = `translate(${e.clientX - 3}px, ${e.clientY - 3}px)`;
+            outline.animate({ transform: `translate(${e.clientX - 22}px, ${e.clientY - 22}px)` }, { duration: 500, fill: "forwards" });
+        });
+
+        // Snow Canvas
+        const canvas = document.getElementById('snow-canvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+        window.addEventListener('resize', resize);
+        resize();
+        class Particle {
+            constructor() { this.reset(); }
+            reset() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.size = Math.random() * 1.5 + 0.5;
+                this.speedY = Math.random() * 0.5 + 0.2;
+                this.speedX = Math.random() * 0.2 - 0.1;
+                this.opacity = Math.random() * 0.3 + 0.1;
+            }
+            update() { this.y += this.speedY; this.x += this.speedX; if (this.y > canvas.height) this.y = -5; }
+            draw() { ctx.fillStyle = `rgba(255, 255, 255, ${this.opacity})`; ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill(); }
+        }
+        for (let i = 0; i < 60; i++) particles.push(new Particle());
+        function animate() { ctx.clearRect(0, 0, canvas.width, canvas.height); particles.forEach(p => { p.update(); p.draw(); }); requestAnimationFrame(animate); }
+        animate();
+
+        // Section Switching
+        function showContent(contentId) {
+            document.querySelectorAll('.content-section').forEach(s => s.classList.add('hidden'));
+            document.querySelectorAll('.active-tab').forEach(b => b.classList.remove('active-tab'));
+            
+            document.getElementById(contentId + 'Content').classList.remove('hidden');
+            const activeBtn = document.getElementById('btn-' + contentId);
+            if(activeBtn) activeBtn.classList.add('active-tab');
+        }
+
+        function toggleDropdown(e) {
+            e.preventDefault();
+            document.getElementById('class-dropdown').classList.toggle('hidden');
+        }
+
+        // --- AI LOGIC (IMPROVED PERCENTAGE & SCANNING) ---
         let currentClassId = '';
         const studentDatabase = {
             classA: ['ganesh', 'sai charan', 'madhan', 'lal shah', 'prasana kumar', 'abhishek', 'anudeep', 'mustafa', 'akif', 'ashok', 'pavan', 'chandraa sekhar', 'murari', 'arun', 'kaushal', 'chandan', 'sai ganesh', 'shaheid'],
-            classB: ['kevin', 'lisa', 'mike', 'nancy', 'oscar', 'paul', 'quinn', 'rachel', 'sam', 'tina'],
-            classC: ['umar', 'vicky', 'will', 'xena', 'yara', 'zane', 'alex', 'bella', 'cody', 'diana'],
-            classD: ['ethan', 'fiona', 'george', 'hannah', 'isaac', 'jasmine', 'kyle', 'laura', 'mark', 'nora']
+            classB: ['kevin', 'lisa', 'mike', 'nancy']
         };
 
         const knownFacesInput = document.getElementById('knownFacesInput');
@@ -189,50 +289,22 @@
 
         let labeledDescriptors = [];
         let faceMatcher;
-        
-        // **STRICTEST THRESHOLD** to prevent misidentification.
-        const MATCH_THRESHOLD = 0.5; 
-
-        // --- Core Functions ---
+        const MATCH_THRESHOLD = 0.5; // Controls strictness
 
         async function loadModels() {
-            statusMessage.textContent = 'Loading AI models... please wait (Check console for network errors if stuck)';
-            recognizeButton.disabled = true;
-            try {
-                const modelPath = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
-                await faceapi.nets.ssdMobilenetv1.loadFromUri(modelPath);
-                await faceapi.nets.faceLandmark68Net.loadFromUri(modelPath);
-                await faceapi.nets.faceRecognitionNet.loadFromUri(modelPath);
-                statusMessage.textContent = 'AI Models loaded successfully! Select a class and upload faces to begin.';
-            } catch (error) {
-                console.error("Failed to initialize face-api models:", error);
-                statusMessage.innerHTML = "🔴 **ERROR:** Failed to load AI models. **You MUST run this file using a local web server** (e.g., Python `http.server` or VS Code Live Server). Double-clicking will not work.";
-            }
+            statusMessage.textContent = 'Booting Neural Engines...';
+            const modelPath = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+            await faceapi.nets.ssdMobilenetv1.loadFromUri(modelPath);
+            await faceapi.nets.faceLandmark68Net.loadFromUri(modelPath);
+            await faceapi.nets.faceRecognitionNet.loadFromUri(modelPath);
+            statusMessage.textContent = 'Attendrix Core: Active.';
         }
-
-        // --- UI Functions ---
-
-        function showContent(contentId) {
-            const allContentSections = document.querySelectorAll('.content-section');
-            allContentSections.forEach(section => section.classList.add('hidden'));
-            document.getElementById(contentId + 'Content').classList.remove('hidden');
-        }
-
-        window.toggleDropdown = (event) => {
-            event.preventDefault();
-            const dropdown = event.target.closest('li').querySelector('ul');
-            dropdown.classList.toggle('hidden');
-        };
-
-        window.toggleDarkMode = () => {
-            document.body.classList.toggle('dark-mode');
-        };
 
         window.showAttendanceContent = (classId) => {
             currentClassId = classId;
             showContent('attendance');
-            attendanceTitle.textContent = `${classId.charAt(0).toUpperCase() + classId.slice(1)} Attendance`;
-            statusMessage.textContent = `Selected ${classId.toUpperCase()}. Upload known faces and group photo.`;
+            attendanceTitle.textContent = `${classId.toUpperCase()} Processing`;
+            statusMessage.textContent = `Target: ${classId.toUpperCase()}`;
             clearAttendanceView();
         };
 
@@ -248,32 +320,16 @@
             recognizeButton.disabled = true;
         }
 
-        function checkReadyToRecognize() {
-            if (labeledDescriptors.length > 0 && groupPhotoImg.src) {
-                faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, MATCH_THRESHOLD); 
-                recognizeButton.disabled = false;
-                statusMessage.textContent = `Ready! ${labeledDescriptors.length} known faces loaded. Strictness: ${MATCH_THRESHOLD}`;
-            } else {
-                recognizeButton.disabled = true;
-            }
-        }
-        
-        // --- Face Recognition Logic ---
-
         async function createLabeledFaceDescriptors(files) {
             const descriptors = [];
-            let facesFound = 0;
-            statusMessage.textContent = `Processing known faces for ${currentClassId}... (0/${files.length})`;
+            statusMessage.textContent = `Syncing Student Data...`;
             knownFacesContainer.innerHTML = '';
 
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 const label = file.name.split('.')[0].toLowerCase().trim(); 
 
-                if (!studentDatabase[currentClassId] || !studentDatabase[currentClassId].includes(label)) {
-                    console.warn(`Skipping file: ${file.name}. Label '${label}' not found in ${currentClassId} database.`);
-                    continue;
-                }
+                if (!studentDatabase[currentClassId]?.includes(label)) continue;
 
                 try {
                     const img = await faceapi.bufferToImage(file);
@@ -281,52 +337,41 @@
 
                     if (detection) {
                         descriptors.push(new faceapi.LabeledFaceDescriptors(label, [detection.descriptor]));
-
-                        const imgPreview = document.createElement('img');
-                        imgPreview.src = URL.createObjectURL(file);
-                        imgPreview.alt = label;
-                        imgPreview.title = label;
-                        imgPreview.className = "w-24 h-24 object-cover rounded-full border-2 border-green-500 shadow-md";
-                        knownFacesContainer.appendChild(imgPreview);
-                        facesFound++;
-                    } else {
-                        console.log(`Could not detect face in image: ${file.name}`);
+                        
+                        const wrap = document.createElement('div');
+                        wrap.className = "flex flex-col items-center gap-2";
+                        const prev = document.createElement('img');
+                        prev.src = URL.createObjectURL(file);
+                        prev.className = "w-20 h-20 object-cover rounded-full border-2 border-indigo-600 shadow-xl shadow-indigo-600/20";
+                        const nm = document.createElement('span');
+                        nm.className = "text-[9px] font-black uppercase text-gray-500";
+                        nm.textContent = label;
+                        wrap.appendChild(prev); wrap.appendChild(nm);
+                        knownFacesContainer.appendChild(wrap);
                     }
-                    statusMessage.textContent = `Processing known faces for ${currentClassId}... (${i + 1}/${files.length} files processed, ${facesFound} faces detected)`;
-
-                } catch (e) {
-                    console.error(`Error processing file ${file.name}:`, e);
-                }
+                } catch (e) { console.error(e); }
             }
-            
-            if (facesFound === 0) {
-                statusMessage.textContent = 'No known faces were successfully detected. Check file names and photo quality.';
-            } else {
-                statusMessage.textContent = `${facesFound} known faces processed. Ready for recognition.`;
-                labeledDescriptors = descriptors;
-            }
+            labeledDescriptors = descriptors;
+            statusMessage.textContent = `System Synchronized.`;
             checkReadyToRecognize();
         }
 
-        // --- Event Listeners ---
-        
-        knownFacesInput.addEventListener('change', (event) => {
-            if (!currentClassId) {
-                statusMessage.textContent = "Please select a class first!";
-                knownFacesInput.value = '';
-                return;
+        function checkReadyToRecognize() {
+            if (labeledDescriptors.length > 0 && groupPhotoImg.src) {
+                faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, MATCH_THRESHOLD); 
+                recognizeButton.disabled = false;
+                statusMessage.textContent = 'Thermal Scan Ready.';
             }
-            const files = Array.from(event.target.files);
-            if (files.length > 0) {
-                createLabeledFaceDescriptors(files);
-            }
+        }
+
+        knownFacesInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) createLabeledFaceDescriptors(Array.from(e.target.files));
         });
 
-        groupPhotoInput.addEventListener('change', (event) => {
-            const file = event.target.files[0];
+        groupPhotoInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
             if (file) {
-                const imageUrl = URL.createObjectURL(file);
-                groupPhotoImg.src = imageUrl;
+                groupPhotoImg.src = URL.createObjectURL(file);
                 groupPhotoImg.onload = () => {
                     outputCanvas.width = groupPhotoImg.offsetWidth;
                     outputCanvas.height = groupPhotoImg.offsetHeight;
@@ -336,24 +381,12 @@
         });
 
         recognizeButton.addEventListener('click', async () => {
-            if (!groupPhotoImg.src || labeledDescriptors.length === 0) {
-                statusMessage.textContent = "Please upload both a group photo and known faces.";
-                return;
-            }
-            statusMessage.textContent = 'Scanning group photo for faces...';
+            statusMessage.textContent = 'Executing Recognition...';
             recognizeButton.disabled = true;
 
-            const detectionOptions = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 });
-            
-            const detections = await faceapi.detectAllFaces(groupPhotoImg, detectionOptions)
+            const detections = await faceapi.detectAllFaces(groupPhotoImg, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
                                             .withFaceLandmarks()
                                             .withFaceDescriptors();
-
-            if (detections.length === 0) {
-                statusMessage.textContent = 'No faces detected in the group photo. Please try a clearer image.';
-                recognizeButton.disabled = false;
-                return;
-            }
 
             const displaySize = { width: groupPhotoImg.offsetWidth, height: groupPhotoImg.offsetHeight };
             faceapi.matchDimensions(outputCanvas, displaySize);
@@ -363,63 +396,67 @@
             ctx.clearRect(0, 0, outputCanvas.width, outputCanvas.height); 
 
             const presentStudents = new Set();
-            const allStudents = new Set(studentDatabase[currentClassId]);
-            let unknownFacesCount = 0;
+            const allStudents = studentDatabase[currentClassId];
+            let unknownCount = 0;
 
             resizedDetections.forEach(detection => {
                 const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
                 const box = detection.detection.box;
-                let label = bestMatch.label;
-                const distance = Math.round(bestMatch.distance * 100) / 100;
-                
-                let drawLabel;
-                let boxColor;
+                const isKnown = bestMatch.label !== 'unknown';
 
-                if (label === 'unknown') {
-                    unknownFacesCount++;
-                    drawLabel = `UNKNOWN PERSON (${distance})`;
-                    boxColor = 'red';
+                // IMPROVED PERCENTAGE LOGIC
+                // (1 - distance) gives a confidence score where 1 is perfect match
+                let confidence = 0;
+                if (isKnown) {
+                    confidence = Math.max(0, Math.min(100, (1 - (bestMatch.distance / MATCH_THRESHOLD) * 0.5) * 100)).toFixed(1);
+                    presentStudents.add(bestMatch.label);
                 } else {
-                    presentStudents.add(label);
-                    drawLabel = `${label.toUpperCase()} (${distance})`;
-                    boxColor = 'green';
+                    unknownCount++;
                 }
-                
-                const drawBox = new faceapi.draw.DrawBox(box, { label: drawLabel, boxColor: boxColor, lineWidth: 2 });
+
+                const drawBox = new faceapi.draw.DrawBox(box, { 
+                    label: isKnown ? `${bestMatch.label.toUpperCase()} (${confidence}%)` : 'UNKNOWN PERSON', 
+                    boxColor: isKnown ? '#6366f1' : '#ef4444' 
+                });
                 drawBox.draw(outputCanvas);
             });
 
-            // Calculate and Display Attendance
             const presentList = Array.from(presentStudents);
-            const absentList = Array.from(allStudents).filter(student => !presentStudents.has(student));
+            const absentList = allStudents.filter(s => !presentStudents.has(s));
 
             attendanceResults.innerHTML = `
-                <h3 class="text-2xl font-bold mb-4 text-gray-800">Attendance Summary</h3>
-                <div class="grid grid-cols-3 gap-4">
-                    <div class="p-4 bg-green-50 rounded-lg border border-green-200">
-                        <h4 class="text-xl font-bold text-green-700 mb-2">Present (${presentList.length})</h4>
-                        <ul class="list-disc list-inside space-y-1 text-sm">
-                            ${presentList.map(student => `<li class="text-green-600">${student}</li>`).join('')}
-                        </ul>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+                    <div>
+                        <h4 class="text-[10px] font-black uppercase tracking-[0.3em] text-green-500 mb-8 flex items-center gap-2">
+                            <i data-lucide="check-circle" class="w-4 h-4"></i> Present (${presentList.length})
+                        </h4>
+                        <div class="flex flex-wrap gap-3">
+                            ${presentList.map(s => `<span class="px-5 py-3 bg-green-500/5 border border-green-500/10 rounded-2xl text-[10px] font-black uppercase text-green-400">${s}</span>`).join('')}
+                        </div>
                     </div>
-                    <div class="p-4 bg-red-50 rounded-lg border border-red-200">
-                        <h4 class="text-xl font-bold text-red-700 mb-2">Absent (${absentList.length})</h4>
-                        <ul class="list-disc list-inside space-y-1 text-sm">
-                            ${absentList.map(student => `<li class="text-red-600">${student}</li>`).join('')}
-                        </ul>
+                    <div>
+                        <h4 class="text-[10px] font-black uppercase tracking-[0.3em] text-red-500 mb-8 flex items-center gap-2">
+                            <i data-lucide="x-circle" class="w-4 h-4"></i> Absent (${absentList.length})
+                        </h4>
+                        <div class="flex flex-wrap gap-3">
+                            ${absentList.map(s => `<span class="px-5 py-3 bg-red-500/5 border border-red-500/10 rounded-2xl text-[10px] font-black uppercase text-red-400">${s}</span>`).join('')}
+                        </div>
                     </div>
-                    <div class="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                        <h4 class="text-xl font-bold text-yellow-700 mb-2">Unknown Faces (${unknownFacesCount})</h4>
-                        <p class="text-yellow-600 text-sm">Faces detected but not recognized (Distance > ${MATCH_THRESHOLD}).</p>
+                </div>
+                <div class="mt-12 pt-8 border-t border-white/5 flex items-center justify-between">
+                    <div class="flex items-center gap-3 text-red-400">
+                        <i data-lucide="shield-alert" class="w-5 h-5 animate-pulse"></i>
+                        <span class="text-[10px] font-black uppercase tracking-widest">Incident Report: ${unknownCount} Foreign Faces Detected.</span>
                     </div>
+                    <div class="text-[9px] font-bold text-gray-500 uppercase tracking-widest italic">Attendrix Audit Logs</div>
                 </div>
             `;
             attendanceResults.classList.remove('hidden');
-            statusMessage.textContent = `Attendance processed successfully! Total faces detected: ${resizedDetections.length}.`;
+            lucide.createIcons();
+            statusMessage.textContent = `Analysis Completed Successfully.`;
             recognizeButton.disabled = false;
         });
 
-        // Initialize the app on page load
         window.onload = loadModels;
     </script>
 </body>
